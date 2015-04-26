@@ -1,0 +1,130 @@
+---
+title: "PracticalMachineLearning P1"
+author: "Torbjörn"
+date: "Saturday, April 25, 2015"
+output: html_document
+---
+
+# Task  
+The goal of your project is to predict the manner in which they did the exercise. This is the "classe" variable in the training set. You may use any of the other variables to predict with. You should create a report describing how you built your model, how you used cross validation, what you think the expected out of sample error is, and why you made the choices you did. You will also use your prediction model to predict 20 different test cases. 
+
+# Load and explore data  
+Datasplit has already taken place so I just load the data and then select a number of relevant features - TidyTesting and TidyTraining. Then we split the training dataset into two sets: one for building/training the model and one for testing the model (trainDS & testDS). Note that both are from the trainingset that we download. Then the input trainingset are used to validate the fitted model (TidyTesting). [Applogize for the confusing naming of sets] 
+```{r echo=FALSE}
+library(caret)
+
+  training <- read.table("./pml-training.csv", header = T, sep = ",")
+  testing <- read.table("./pml-testing.csv", header = T, sep = ",")
+# Tidy dataset
+## select out some columns/measures for body means - se ReadMe - 
+## select out some columns/measures for body means - se ReadMe - 
+rem <- grep("mean", names(training))           ## Select column containing "mean"
+rem_tmp <- grep("max", names(training))        ## Select column containing "max"
+rem <- append(rem, rem_tmp)                  ## append to a single keep list
+rem_tmp <- grep("min", names(training))        ## Select column containing "min"
+rem <- append(rem, rem_tmp)                  ## append to a single keep list
+rem_tmp <- grep("avg", names(training))        ## Select column containing "avg"
+rem <- append(rem, rem_tmp)                  ## append to a single keep list
+rem_tmp <- grep("sum", names(training))        ## Select column containing "sum"
+rem <- append(rem, rem_tmp)                  ## append to a single keep list
+rem_tmp <- grep("var", names(training))        ## Select column containing "var"
+rem <- append(rem, rem_tmp)                  ## append to a single keep list
+rem_tmp <- grep("kurtosis", names(training))        ## Select column containing "kurtosis"
+rem <- append(rem, rem_tmp)                  ## append to a single keep list
+rem_tmp <- grep("skewness", names(training))        ## Select column containing "skewness"
+rem <- append(rem, rem_tmp)                  ## append to a single keep list
+rem_tmp <- grep("stddev", names(training))        ## Select column containing "stddev"
+rem <- append(rem, rem_tmp)                  ## append to a single keep list
+rem_tmp <- grep("amplitude", names(training))        ## Select column containing "amplitude"
+rem <- append(rem, rem_tmp)                  ## append to a single keep list
+
+rem <- append(c(1:6), rem)              ## append some columns to a single keep list
+TidyTraining <- training[, -rem ]         ## Create a temporary tidy set with selected columns
+TidyTesting <- testing[, -rem ]         ## Create a temporary tidy set with selected columns
+rm(rem_tmp); rm(rem)
+```
+Kept 54 variables in the tidy dataset. I selected those that wasn't aggregated or calculated.
+Exploring the tidy dataset:  
+```{r}
+  # Get the size of the two datasets
+  dim(TidyTraining); dim(TidyTesting)
+
+```
+
+# Preprocessing and transformation  
+Together with a domain expert a reduction of the 54 variables and to do some transformation, normalizations and standardizations would have been preferable to this task. Just plotting the featureplot took to long time, even on a modern PC.  
+```{r}
+
+  # plot selection of calculated features
+  totgrep <- which(grepl("^total", colnames(TidyTraining), ignore.case = F))
+  totals <- TidyTraining[, totgrep]
+  featurePlot(x = totals, y = TidyTraining$classe, pch = 19, main = "Feature plot", plot = "pairs")
+```
+  The belt plot shows two groups, for the other of the calculated variables there where more evenly spread of the variables and respective class. 
+
+# Fit the model  
+Cross validation are built-in function of the random forrest algorithm.  
+```{r}
+  set.seed(1234)
+  # Build the model with Random forrest
+  inTrain <- createDataPartition(y=TidyTraining$classe, p=0.7, list=F)
+  trainDS <- TidyTraining[inTrain,]
+  testDS <- TidyTraining[-inTrain,]
+
+  #  build the model using Cross validation
+  train_control <- trainControl(method="cv", number=2, allowParallel=TRUE)
+  Fit_FT <- train(classe ~ ., data=trainDS, method="rf", prox=T, trControl=train_control, ntree=50, tuneLength=1)
+  Fit_FT
+
+```
+  Accuracy  ~99% for the model.   
+  
+  
+# Accuracy of the model compared to testset  
+Looking at a confusion matrix  
+```{r}
+      pred <- predict(Fit_FT, testDS)
+      testDS$predRight <- pred==testDS$classe
+      # table(pred,testDS$classe)
+      confusionMatrix(table(pred,testDS$classe))
+```
+  Accuracy  ~99% for the model with cross validation gives ~0.25% for the in-sample-error. 
+The model managed to find almost all of the right classes also in the testset. With a confidence intervall of: 0.9958-0.9986.
+
+# Out of sample Error  
+Out of sample error, in %: 
+```{r}
+      ### Out-of-Sample Error rate ###
+      round(100*(1-sum(testDS$predRight)/nrow(testDS) ), 2)
+```
+Manual calculation: 15/5022 -> 0,3% faults in the data matrix.  
+
+# Prediction  
+Prediction from 20 observation :  
+```{r}
+      pred <- predict(Fit_FT, TidyTesting)
+      pred
+      summary(pred)
+
+```
+  
+# Conclusion
+Good fitting in the testset/validationset.  
+Could/Should work more on tidying up the dataset, but after spent 8+ hours on trying to understand the data and 10+ hours on waiting and optimizing the fitting on my computer there wasn't time for that. IRL you would most certainly have had access to some deeper domain expertise. 
+
+The dataset is from : The data for this project come from this source: http://groupware.les.inf.puc-rio.br/har  
+
+# write file
+```{r echo=FALSE}
+pml_write_files = function(x) {
+    n = length(x)
+    for (i in 1:n) {
+        filename = paste0("problem_id_",i,".txt")
+        write.table(x[i], file = filename, quote = FALSE, row.names = FALSE, 
+            col.names = FALSE)
+    }
+}
+
+pml_write_files(pred)
+```
+
